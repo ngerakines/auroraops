@@ -4,6 +4,8 @@ The `auroraops` program allows you to interact with a nanoleaf aurora.
 
 This application uses local and remote configuration to programatically update individual or groups of panels (triangles).
 
+Demo: https://youtu.be/ePlpQkaogdI
+
 # Configuration
 
 There are two different configuration sets used. The first is **local** configuration that describes the behavior of statuses and how panels are grouped together by "thing". The second is **remote** configuration that tells the application what the current state of things is.
