@@ -39,7 +39,7 @@ archive:
     - goos: windows
       format: zip
   files:
-  - LICENSE.md
+  - LICENSE
   - README.md
 snapshot:
   name_template: SNAPSHOT-{{ .Commit }}
