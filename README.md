@@ -2,7 +2,7 @@
 
 The `auroraops` program allows you to interact with a nanoleaf aurora.
 
-This application uses local and remote configuration to programatically update individual or groups of panels (triangles).
+This application uses local and remote configuration to programmatically update individual or groups of panels (triangles).
 
 Demo: https://youtu.be/ePlpQkaogdI
 
