@@ -38,7 +38,9 @@ type auroraClient struct {
 
 // New creates a new client.
 func New(address string) (AuroraClient, error) {
-	return NewWithToken(address, "")
+	return &auroraClient{
+		address: address,
+	}, nil
 }
 
 // NewWithToken creates a new client with a provided token.

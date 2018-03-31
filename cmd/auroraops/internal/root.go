@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"bufio"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"path"
@@ -16,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var (
@@ -27,27 +30,152 @@ var RootCmd = &cobra.Command{
 	Short: "auroraops is a tool to relay information to your nanoleaf aurora.",
 }
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version number of mcpp",
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Performs first-time setup.",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("auroraops v1.0.0 -- HEAD")
+		hosts, err := client.Disocver(5 * time.Second)
+		if err != nil {
+			log.WithError(err).Error("Could not discover aurora.")
+			os.Exit(1)
+		}
+		if len(hosts) == 0 {
+			log.Error("No aurora hosts found.")
+			os.Exit(1)
+		}
+		if len(hosts) > 1 {
+			log.WithField("hosts", hosts).Error("More than one aurora host found.")
+			os.Exit(1)
+		}
+
+		client, err := client.New(hosts[0])
+		if err != nil {
+			log.WithError(err).Error("Could not discover aurora.")
+			os.Exit(1)
+		}
+
+		fmt.Println("Need to authenticate to device. Hold power button to enter pairing mode. Press enter when ready.")
+		reader := bufio.NewReader(os.Stdin)
+		reader.ReadString('\n')
+		token, err := client.Authorize()
+		if err != nil {
+			log.WithError(err).Error("Unable to authenticate")
+			os.Exit(1)
+		}
+
+		type Config struct {
+			Name string `json:"name" yaml:"name"` // Supporting both JSON and YAML.
+			Age  int    `json:"name" yaml:"name"`
+		}
+
+		data := struct {
+			Panel struct {
+				URL string `yaml:"url"`
+				Key string `yaml:"key"`
+			} `yaml:"panel"`
+		}{
+			Panel: struct {
+				URL string `yaml:"url"`
+				Key string `yaml:"key"`
+			}{
+				URL: hosts[0],
+				Key: token,
+			},
+		}
+
+		d, err := yaml.Marshal(&data)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"token": token,
+				"host":  hosts[0],
+			}).WithError(err).Error("Unable to compose yaml")
+			os.Exit(1)
+		}
+
+		if err := ioutil.WriteFile(args[0], d, 0644); err != nil {
+			log.WithFields(log.Fields{
+				"token": token,
+				"host":  hosts[0],
+			}).WithError(err).Error("Unable to compose yaml")
+			os.Exit(1)
+		}
+		log.WithFields(log.Fields{
+			"file":  args[0],
+			"token": token,
+			"host":  hosts[0],
+		}).Info("Configuration file initialized")
 	},
 }
 
-// This is a very nice thing Golang forces you to do!
-// It is necessary so that we can write out the literal of the colortable below.
-func MustParseHex(s string) colorful.Color {
-	c, err := colorful.Hex(s)
-	if err != nil {
-		panic("MustParseHex: " + err.Error())
-	}
-	return c
+var colors = map[string]string{
+	"white":   "#ffffff",
+	"grey":    "#808080",
+	"red":     "#ff0000",
+	"maroon":  "#80000",
+	"yellow":  "#ffff00",
+	"lime":    "#00ff00",
+	"green":   "#00ffff",
+	"aqua":    "#00FFFF",
+	"teal":    "#008080",
+	"blue":    "#0000ff",
+	"fuchsia": "#ff00ff",
+	"purple":  "#800080",
+	"olive":   "#808000",
+}
+
+var infoCmd = &cobra.Command{
+	Use:   "info",
+	Short: "Run the server.",
+	Run: func(cmd *cobra.Command, args []string) {
+		auroraClient, err := client.NewWithToken(viper.GetString("panel.url"), viper.GetString("panel.key"))
+		if err != nil {
+			log.WithError(err).Error("Could not create aurora client.")
+			os.Exit(1)
+		}
+		panelInfo, err := auroraClient.GetInfo()
+		if err != nil {
+			log.WithError(err).Error("Could not get panel info")
+			os.Exit(1)
+		}
+
+		colorNames := make([]string, 0, len(colors))
+		colorfulColors := make([]colorful.Color, 0, len(colors))
+		for name, hex := range colors {
+			colorNames = append(colorNames, name)
+			color, err := colorful.Hex(hex)
+			if err != nil {
+				log.WithError(err).Errorf("Could not process color %s %s", name, hex)
+				os.Exit(1)
+			}
+			colorfulColors = append(colorfulColors, color)
+		}
+
+		colorIndex := 0
+		for _, panel := range panelInfo.Panels {
+			if colorIndex > len(colorNames) {
+				colorIndex = 0
+			}
+			color := colorfulColors[colorIndex]
+			colorName := colorNames[colorIndex]
+			fmt.Printf("Setting panel %d to %s\n", panel.ID, colorName)
+			r, g, b := color.Clamped().RGB255()
+			auroraClient.SetPanelColor(byte(panel.ID), byte(r), byte(g), byte(b))
+
+			colorIndex = colorIndex + 1
+		}
+
+		time.Sleep(2 * time.Second)
+
+		if err = auroraClient.Stop(); err != nil {
+			log.WithError(err).Error("Could not stop aurora client.")
+		}
+	},
 }
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Run the update server",
+	Short: "Run the server.",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		auroraClient, err := client.NewWithToken(viper.GetString("panel.url"), viper.GetString("panel.key"))
@@ -133,10 +261,10 @@ var serverCmd = &cobra.Command{
 
 func init() {
 	log.SetLevel(log.InfoLevel)
-	RootCmd.AddCommand(versionCmd)
+	RootCmd.AddCommand(initCmd)
+	RootCmd.AddCommand(infoCmd)
 	RootCmd.AddCommand(serverCmd)
 
-	// serverCmd.Flags().String("profile", "default", "The configuration profile to reference (default is 'default')")
 	serverCmd.Flags().StringVar(&cfgFile, "config", "", "config file (default is ./auroraops.yaml)")
 
 	viper.SetDefault("status.location", "http://localhost:8080/")
@@ -147,7 +275,6 @@ func init() {
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("AURORAOPS")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	// viper.BindPFlag("profile", serverCmd.Flags().Lookup("profile"))
 
 	cobra.OnInitialize(initConfig)
 }
