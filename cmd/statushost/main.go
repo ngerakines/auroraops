@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/kr/pretty"
@@ -29,9 +30,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	data.Store("load-balancer", "ok")
-	data.Store("app-1", "ok")
-	data.Store("app-2", "ok")
+	data.Store("https://ngerakines.me/", "success")
 	go func() {
 		http.HandleFunc("/", handler)
 		if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -42,11 +41,16 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	var text string
 	for text != "q" { // break the loop if text == "q"
-		fmt.Print("Enter your text: ")
+		fmt.Print("command (set and unset):")
 		scanner.Scan()
 		text = scanner.Text()
 		if text != "q" {
-			fmt.Println("Your text was: ", text)
+			parts := strings.Split(text, ":")
+			if parts[0] == "set" {
+				data.Store(parts[1], parts[2])
+			} else if parts[0] == "unset" {
+				data.Delete(parts[1])
+			}
 		}
 	}
 }

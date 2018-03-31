@@ -7,9 +7,11 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/ngerakines/auroraops"
+	"github.com/ngerakines/auroraops/client"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -37,6 +39,44 @@ var serverCmd = &cobra.Command{
 	Short: "Run the update server",
 	Run: func(cmd *cobra.Command, args []string) {
 
+		thingManager := auroraops.NewThingManager()
+		if err := viper.UnmarshalKey("status", &thingManager.Status); err != nil {
+			log.WithError(err).Error("Could not parse status configuration.")
+			os.Exit(1)
+		}
+		if err := viper.UnmarshalKey("things", &thingManager.Things); err != nil {
+			log.WithError(err).Error("Could not parse status configuration.")
+			os.Exit(1)
+		}
+
+		if err := thingManager.Init(); err != nil {
+			log.WithError(err).Error("Invalid thing configuration.")
+			os.Exit(1)
+		}
+
+		auroraClient, err := client.NewWithToken(viper.GetString("panel.url"), viper.GetString("panel.key"))
+		if err != nil {
+			log.WithError(err).Error("Could not create aurora client.")
+			os.Exit(1)
+		}
+
+		onstart := viper.GetString("onstart")
+		log.WithField("color", onstart).Info("Clearing panels")
+		if onstart != "" {
+			if err := auroraops.ClearPanels(auroraClient, onstart); err != nil {
+				log.WithError(err).Error("Could not clear panels.")
+				os.Exit(1)
+			}
+			log.Info("Panels cleared.")
+		}
+
+		// pretty.Println(thingManager)
+
+		if err = thingManager.StartAll(auroraClient); err != nil {
+			log.WithError(err).Error("Could not start things.")
+			os.Exit(1)
+		}
+
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -53,10 +93,10 @@ var serverCmd = &cobra.Command{
 		}()
 
 		go func() {
-			if err := auroraops.NewUpdater(stop, &wg, statusFerry); err != nil {
+			if err := auroraops.NewUpdater(stop, &wg, statusFerry, thingManager, auroraClient); err != nil {
 				log.WithError(err).Error("Error shutting down status updater.")
 			} else {
-				log.Info("status poller updater.")
+				log.Info("status updater stopped.")
 			}
 			wg.Done()
 		}()
@@ -66,10 +106,22 @@ var serverCmd = &cobra.Command{
 		<-c
 		close(stop)
 		wg.Wait()
+
+		if err = thingManager.StopAll(auroraClient); err != nil {
+			log.WithError(err).Error("Could not stop things.")
+		}
+
+		time.Sleep(2 * time.Second)
+
+		if err = auroraClient.Stop(); err != nil {
+			log.WithError(err).Error("Could not stop aurora client.")
+		}
+
 	},
 }
 
 func init() {
+	log.SetLevel(log.InfoLevel)
 	RootCmd.AddCommand(versionCmd)
 	RootCmd.AddCommand(serverCmd)
 
@@ -78,6 +130,8 @@ func init() {
 
 	viper.SetDefault("status.location", "http://localhost:8080/")
 	viper.SetDefault("status.interval", 3)
+	viper.SetDefault("validate.thing", true)
+	viper.SetDefault("validate.status", true)
 
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("AURORAOPS")

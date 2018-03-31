@@ -36,6 +36,7 @@ func NewPoller(stop chan struct{}, wg *sync.WaitGroup, statusDestination chan St
 	defer cancel()
 
 	go func() {
+		wg.Add(1)
 		<-stop
 		log.Info("Gracefully stopping poller.")
 		if err := server.Shutdown(ctx); err != nil {
@@ -65,17 +66,11 @@ func (p *poller) Run() error {
 		case <-p.stop:
 			return nil
 		case t := <-p.ticker.C:
-			log.WithField("time", t).Info("Tick")
+			log.WithField("time", t).Debug("polling")
 			var statusData map[string]string
 			if err := p.poll(&statusData); err != nil {
-				p.statusDestination <- map[string]string{
-					"location": p.location,
-					"time":     t.String(),
-					"error":    err.Error(),
-				}
+				log.WithError(err).Error()
 			} else {
-				statusData["location"] = p.location
-				statusData["time"] = t.String()
 				p.statusDestination <- statusData
 			}
 		}
