@@ -88,6 +88,8 @@ Setting panel 34 to yellow
 Setting panel 28 to lime
 ```
 
+[ ![Alt text](https://github.com/ngerakines/auroraops/raw/master/IMG_3687_tn.jpg?raw=true) ](https://github.com/ngerakines/auroraops/raw/master/IMG_3687.jpg?raw=true)
+
 # License
 
 Copyright 2018 Nick Gerakines
