@@ -39,7 +39,13 @@ var serverCmd = &cobra.Command{
 	Short: "Run the update server",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		thingManager := auroraops.NewThingManager()
+		auroraClient, err := client.NewWithToken(viper.GetString("panel.url"), viper.GetString("panel.key"))
+		if err != nil {
+			log.WithError(err).Error("Could not create aurora client.")
+			os.Exit(1)
+		}
+
+		thingManager := auroraops.NewThingManager(auroraClient)
 		if err := viper.UnmarshalKey("status", &thingManager.Status); err != nil {
 			log.WithError(err).Error("Could not parse status configuration.")
 			os.Exit(1)
@@ -51,12 +57,6 @@ var serverCmd = &cobra.Command{
 
 		if err := thingManager.Init(); err != nil {
 			log.WithError(err).Error("Invalid thing configuration.")
-			os.Exit(1)
-		}
-
-		auroraClient, err := client.NewWithToken(viper.GetString("panel.url"), viper.GetString("panel.key"))
-		if err != nil {
-			log.WithError(err).Error("Could not create aurora client.")
 			os.Exit(1)
 		}
 

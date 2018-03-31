@@ -66,7 +66,7 @@ func (ec *externalCommand) loop() error {
 		case command := <-ec.ch:
 			updates[command.ID] = []byte{1, command.R, command.G, command.B, 0, 1}
 		case <-ec.t.Dying():
-			log.WithField("count", len(updates)).Warn("Stopping aurora client")
+			log.WithField("count", len(updates)).Info("Stopping aurora client")
 			close(ec.ch)
 			return nil
 		}

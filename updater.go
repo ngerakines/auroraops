@@ -75,6 +75,14 @@ func (p *updater) Run() error {
 				fields[thingPair.thing] = thingPair.status
 			}
 			log.WithFields(fields).Info("received data")
+			for _, thingPair := range thingPairs {
+				if err := p.thingManager.UpdateThing(thingPair.thing, thingPair.status); err != nil {
+					log.WithError(err).WithFields(log.Fields{
+						"thing":  thingPair.thing,
+						"status": thingPair.status,
+					}).Error("Could not update thing.")
+				}
+			}
 		}
 	}
 }

@@ -7,6 +7,8 @@ import (
 
 	colorful "github.com/lucasb-eyer/go-colorful"
 	"github.com/ngerakines/auroraops/client"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type StatusConfigSet struct {
@@ -21,16 +23,18 @@ type ThingConfigSet struct {
 }
 
 type ThingManager struct {
-	Status      map[string]StatusConfigSet
-	Things      map[string]ThingConfigSet
-	panelGroups map[string]*panelGroup
+	auroraClient client.AuroraClient
+	Status       map[string]StatusConfigSet
+	Things       map[string]ThingConfigSet
+	panelGroups  map[string]*panelGroup
 }
 
-func NewThingManager() *ThingManager {
+func NewThingManager(auroraClient client.AuroraClient) *ThingManager {
 	return &ThingManager{
-		Status:      make(map[string]StatusConfigSet),
-		Things:      make(map[string]ThingConfigSet),
-		panelGroups: make(map[string]*panelGroup),
+		auroraClient: auroraClient,
+		Status:       make(map[string]StatusConfigSet),
+		Things:       make(map[string]ThingConfigSet),
+		panelGroups:  make(map[string]*panelGroup),
 	}
 }
 
@@ -113,4 +117,53 @@ func (m *ThingManager) StopAll(auroraClient client.AuroraClient) error {
 		}
 	}
 	return nil
+}
+
+func (m *ThingManager) UpdateThing(thing, status string) error {
+	pg, hasPanelGroup := m.panelGroups[thing]
+	if !hasPanelGroup {
+		return fmt.Errorf("error: no panel group for thing")
+	}
+	if pg.currentState.status == status {
+		log.WithFields(log.Fields{
+			"thing":  thing,
+			"status": status,
+		}).Info("Thing already has this status.")
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := pg.action.Stop(ctx); err != nil {
+		return err
+	}
+
+	newAction, err := m.actionForStatus(status, pg.panels, m.auroraClient)
+	if err != nil {
+		return err
+	}
+	pg.action = newAction
+	err = pg.action.Start()
+	if err != nil {
+		return err
+	}
+	pg.currentState.status = status
+	pg.currentState.updatedAt = time.Now()
+
+	return nil
+}
+
+func (m *ThingManager) actionForStatus(status string, panels []int, ac client.AuroraClient) (Action, error) {
+	statusConfig, hasStatus := m.Status[status]
+	if !hasStatus {
+		return nil, fmt.Errorf("no action for status: %s", status)
+	}
+	if statusConfig.Type == "solid" {
+		color, err := colorful.Hex(statusConfig.Color)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid color: %s", statusConfig.Color)
+		}
+		return NewSolidFillAction(ac, panels, color)
+	}
+	return nil, fmt.Errorf("unsupported status type: %s", statusConfig.Type)
 }
