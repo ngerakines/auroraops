@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	colorful "github.com/lucasb-eyer/go-colorful"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/ngerakines/auroraops"
 	"github.com/ngerakines/auroraops/client"
@@ -32,6 +33,16 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("auroraops v1.0.0 -- HEAD")
 	},
+}
+
+// This is a very nice thing Golang forces you to do!
+// It is necessary so that we can write out the literal of the colortable below.
+func MustParseHex(s string) colorful.Color {
+	c, err := colorful.Hex(s)
+	if err != nil {
+		panic("MustParseHex: " + err.Error())
+	}
+	return c
 }
 
 var serverCmd = &cobra.Command{

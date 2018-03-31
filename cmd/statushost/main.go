@@ -45,7 +45,7 @@ func main() {
 		scanner.Scan()
 		text = scanner.Text()
 		if text != "q" {
-			parts := strings.Split(text, ":")
+			parts := strings.Split(text, " ")
 			if parts[0] == "set" {
 				data.Store(parts[1], parts[2])
 			} else if parts[0] == "unset" {

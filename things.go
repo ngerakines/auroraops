@@ -164,6 +164,13 @@ func (m *ThingManager) actionForStatus(status string, panels []int, ac client.Au
 			return nil, errors.Wrapf(err, "invalid color: %s", statusConfig.Color)
 		}
 		return NewSolidFillAction(ac, panels, color)
+	} else if statusConfig.Type == "breath" {
+		to, err := colorful.Hex(statusConfig.Color)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid color: %s", statusConfig.Color)
+		}
+		from, err := colorful.Hex("#ffffff")
+		return NewBreathAction(ac, panels, to, from, 1)
 	}
 	return nil, fmt.Errorf("unsupported status type: %s", statusConfig.Type)
 }
